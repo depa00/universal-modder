@@ -1748,7 +1748,7 @@
    "dinput8.dll proxy (own)",
    "llvm-mingw 20261006 (i686)",
    "Python 3 (debug-port scripts)",
-   "um win shot/drive"
+   "um win shot/drive/record"
   ],
   "anti_cheat": "none (single-player); offline only",
   "status": "working",
@@ -1769,6 +1769,8 @@
    "anim-tree",
    "pickups",
    "particles",
+   "sound",
+   "wwise",
    "bend-time",
    "hot-reload",
    "ue3",

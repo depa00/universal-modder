@@ -7,14 +7,14 @@ game_version: "Definitive Edition, Steam app 205100, 32-bit UE3 licensee; same g
 platform: windows
 engine: unreal
 route: native-hook
-tools: ["dinput8.dll proxy (own)", "llvm-mingw 20261006 (i686)", "Python 3 (debug-port scripts)", "um win shot/drive"]
+tools: ["dinput8.dll proxy (own)", "llvm-mingw 20261006 (i686)", "Python 3 (debug-port scripts)", "um win shot/drive/record"]
 anti_cheat: "none (single-player); offline only"
 status: working
 agents: ["Claude Code (Opus 5.5)"]
 humans: ["depa00"]
 date: 2026-10-16
 links: []
-tags: [telekinesis, ragdoll, physx, impact-damage, first-person-animation, anim-tree, pickups, particles, bend-time, hot-reload, ue3, reflection]
+tags: [telekinesis, ragdoll, physx, impact-damage, first-person-animation, anim-tree, pickups, particles, sound, wwise, bend-time, hot-reload, ue3, reflection]
 ---
 
 # Telekinesis power for Dishonored (2012): controlled ragdolls, impact damage, hand animations, object pickup
@@ -24,7 +24,7 @@ tags: [telekinesis, ragdoll, physx, impact-damage, first-person-animation, anim-
 > knock other guards over and get back up if they survive; whale oil tanks explode on impact; pickups
 > (grenades, elixirs, ammo, rewire tools) are pulled to the hand and picked up. The left hand plays the
 > Possession cast pose while holding and the Windblast push on release; the Possession smoke wraps the held
-> object. Native in-process DLL (dinput8 proxy) driving the engine through SDK-free UE3 reflection.
+> object; the Blink charge sound plays on grab, the Windblast gust and a sword whoosh on throw. Native in-process DLL (dinput8 proxy) driving the engine through SDK-free UE3 reflection.
 > Verified in the real game with debug-port numbers, per-frame logs, screenshots and scripted stress tests.
 
 ## Setup
@@ -146,6 +146,15 @@ on the held object (scaled to its `Bounds.SphereRadius` / 90), `Possession_HandC
 stop it), `Windblast_lvl1` on throw, `Windblast_GroundImpact_01` on hard impacts. Take the component from
 `SpawnEmitter`'s return value (with the renamed parameters).
 
+**Sounds (Wwise).** Dishonored plays sounds through Wwise: `AkEvent` objects (e.g.
+`Snd_Power_Player.Snd_Power_P_Blink_Start`) posted on an actor with the native `Actor.PostAkEvent(InAkEvent)`,
+which works from PostRender. There is no generic stop call: looping events need their own paired stop event,
+so for a power prefer one-shot events and check each one. We play `Snd_Power_P_Blink_Start` (the Blink
+charge, one-shot ~3 s) on grab, and on throw `Snd_Pwr_P_WindBlast_lvl_1` on the player plus
+`Snd_Weapon.Snd_Weapon_Sword_Whooshe_ak` on the thrown actor (both one-shot). `Snd_Power_Possession_In_Lvl1`
+(one-shot ~2 s) also works but felt too repetitive on every grab. Find events with a name search over
+GObjects (`AkEvent` class).
+
 **Mouse wheel.** The game reads the mouse through DirectInput, so a low-level Windows hook does not stop the
 weapon wheel. Patching the vtables of `IDirectInput8::CreateDevice` and, for `GUID_SysMouse`,
 `GetDeviceState` (zero `lZ`) / `GetDeviceData` (drop `DIMOFS_Z` records) while the power is held does.
@@ -163,6 +172,8 @@ weapon wheel. Patching the vtables of `IDirectInput8::CreateDevice` and, for `GU
 - Screenshots of every visual change (dangling guard, hand poses, crossbow restored, FX scale, tank
   explosion) checked one by one.
 - Scripted stress test: 3 rounds x 5 throws in different directions + held wheel-out + get-ups, no crash.
+- Sounds: game-only audio captured with `um win record` (process loopback) while posting each event from the
+  debug port, then loudness / band energy per 125-250 ms to see when a sound starts and whether it ends.
 - Crashes diagnosed from the game's minidumps (module list + exception address -> symbol of the logic DLL).
 - Not verified: other NPC types than city guards (bone names may differ), rats (crowd agents, not pawns),
   other gadgets than the crossbow for the hand swap, controllers.
@@ -215,6 +226,13 @@ weapon wheel. Patching the vtables of `IDirectInput8::CreateDevice` and, for `GU
     `BodyInstance.SetFixed(false)`.
 23. **Symptom:** test results made no sense. **Cause:** the human was playing at the same time.
     **Fix:** ask for hands-off windows during scripted tests.
+24. **Symptom:** effects "cast from the left hand" appear on the right, by the sword. **Cause:** UE3 is
+    left-handed (X forward, Y right, Z up), so `view x up` points to the LEFT; we subtracted it as if it
+    pointed right. **Fix:** add it (or use `up x view` for right).
+25. **Symptom:** the game-audio capture is pure silence. **Cause:** the game mutes when its window is not in
+    the foreground, and on the Game Over screen (a guard alerted by the tests killed the player). **Fix:**
+    focus the window right before recording and keep the player safe; check a screenshot when a capture is
+    flat zero.
 
 ## Assets
 None created. All effects and animations are the game's own, used at runtime; nothing extracted or shipped.
