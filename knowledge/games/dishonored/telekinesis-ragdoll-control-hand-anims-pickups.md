@@ -24,8 +24,9 @@ tags: [telekinesis, ragdoll, physx, impact-damage, first-person-animation, anim-
 > knock other guards over and get back up if they survive; whale oil tanks explode on impact; pickups
 > (grenades, elixirs, ammo, rewire tools) are pulled to the hand and picked up. The left hand plays the
 > Possession cast pose while holding and the Windblast push on release; the Possession smoke wraps the held
-> object; the Blink charge sound plays on grab, the Windblast gust and a sword whoosh on throw. Native in-process DLL (dinput8 proxy) driving the engine through SDK-free UE3 reflection.
-> Verified in the real game with debug-port numbers, per-frame logs, screenshots and scripted stress tests.
+> object; the Blink charge sound plays on grab, the Windblast gust and a sword whoosh on throw. Native
+> in-process DLL (dinput8 proxy) driving the engine through SDK-free UE3 reflection. Verified in the real game
+> with debug-port numbers, per-frame logs, screenshots and scripted stress tests.
 
 ## Setup
 - Dishonored Definitive Edition, Steam app 205100, Windows 11, launched with
@@ -39,13 +40,16 @@ tags: [telekinesis, ragdoll, physx, impact-damage, first-person-animation, anim-
   - `DisPowersLogic.dll`: all gameplay (powers, overlay, debug commands).
 - Reflection layout, GNames/GObjects discovery and the PostRender `Func` swap are exactly as in
   `knowledge/games/dishonored/ghost-co-op-ue3-reflection-postrender-hook.md`; everything there held for this
-  install.
+  install. That note ran buildid 8335061 under Proton, this one native Windows 11; `Dishonored.exe` has no
+  ASLR, so the identical GNames/GObjects addresses point to the same exe build.
 
 ## Route and why
 - Native in-process DLL, same reasons as the ghost co-op note (cooked packages, no script compiler route).
 - Everything runs from the PostRender hook (render time). No per-tick script hook was found (see Gotchas),
   so the design works around render-time limits instead of fighting for a tick hook.
 - Hot reload of the logic DLL was decisive: dozens of rebuilds without restarting the game.
+- **Related:** the ghost co-op note above (same host/logic DLL split and debug port), and its open question
+  about a script event inside the world tick, which Gotcha 4 here probes.
 
 ## How the game works (what we had to learn)
 **Calling functions.** ProcessEvent with a parameter block filled by property name works for script and
@@ -57,7 +61,9 @@ functions of the actual object, not the base class.
 **What fails from PostRender.** `Actor.Trace`/`FastTrace` always report nothing/blocked (even 10 uu in empty
 space). `PC.Use()` does nothing. `SetPhysics(PHYS_RigidBody)` is ignored on resting pickups.
 `ForceUpdateComponents(bCollisionUpdate=true)`, `SetRBCollisionChannels(Channels)` and
-`SpawnEmitterMeshAttachment` on a ragdoll bone hit a fatal assert. These work: `InitRagdoll`/`TermRagdoll`,
+`SpawnEmitterMeshAttachment` on a ragdoll bone hit a fatal assert. (The ghost co-op note calls
+`ForceUpdateComponents` from PostRender to move its puppet without trouble; UE3's default is
+`bCollisionUpdate=false`.) These work: `InitRagdoll`/`TermRagdoll`,
 `SetRBLinearVelocity`, `AddImpulse(bVelChange)` on a bone, `SetRBPosition`, `GetBoneLocation`,
 `RB_BodyInstance.GetUnrealWorldVelocity`, `SetRBCollidesWithChannel`, `TakeDamage`, `SpawnEmitter`,
 particle `SetTranslation`/`SetScale`/`DeactivateSystem`/`KillParticlesForced`, anim `SetAnim`/`PlayAnim`,
@@ -80,7 +86,8 @@ sight).
 - After `InitRagdoll` a living NPC's mesh stays in its pawn RB channel (54) and collides only with
   `DisPawnChannel*`: it flies through walls. A death ragdoll made by the game uses `RBChannel` 16 (DeadPawn)
   and `RBCollideWithChannels` = 0x00050221 (Default, GameplayPhysics, SeveredLimbs, DeadPawn,
-  ClothingCollision). We set that channel and write that raw mask; `SetRBCollidesWithChannel(Default, true)`
+  ClothingCollision: bits 0, 5, 9, 16 and 18, the stock UE3 `ERBCollisionChannel` positions, where bit 9 is
+  `RBCC_Untitled3`). We set that channel and write that raw mask; `SetRBCollidesWithChannel(Default, true)`
   then pushes the whole container to PhysX (`SetRBCollidesWithChannel(20..26)` does not reach the
   DisPawnChannel bits).
 - Do NOT add `BlockingVolume`: the level's invisible player-blocking walls stop thrown bodies mid-air.
@@ -137,9 +144,10 @@ crossbow attached to the hand.
 **Objects.** Whale oil tank = `DisWhaleOilBattery` (KActor family, PHYS_RigidBody); our impact damage makes
 it explode by itself. Placed pickups (`DisElixirHealth`, `DisElixirMana`, `DisStatPickup`,
 `DisAbstractItemPickup`, `DishonoredInventoryPickup`) rest with PHYS_None and a fixed body: write
-`Physics = 10`, call `StaticMeshComponent.BodyInstance.SetFixed(false)` and `WakeRigidBody`. They implement
-the native `IDisInteractableInterface` (no script functions): the game's own prompt ("[F] Pick up") appears
-when the held object sits exactly under the crosshair, and the real use key picks it up while held.
+`Physics = 10` (PHYS_RigidBody), call `StaticMeshComponent.BodyInstance.SetFixed(false)` and
+`WakeRigidBody`. They implement the native `IDisInteractableInterface` (no script functions): the game's own
+prompt ("[F] Pick up") appears when the held object sits exactly under the crosshair, and the real use key
+picks it up while held.
 
 **Effects borrowed from powers** (already loaded in missions): `Vfx_GamePlay.Possession.PossesTarget_Human_01`
 on the held object (scaled to its `Bounds.SphereRadius` / 90), `Possession_HandCast_01` at the hand (it loops:
@@ -222,8 +230,8 @@ weapon wheel. Patching the vtables of `IDirectInput8::CreateDevice` and, for `GU
     **Fix:** stop it (and kill pooled leftovers) on release.
 21. **Symptom:** held pickups can't be picked up. **Cause:** held above the crosshair. **Fix:** no lift for
     objects; auto-press the use key when pulled close (key held ~80 ms; a same-instant down/up is missed).
-22. **Symptom:** elixirs/ammo can't be grabbed. **Cause:** PHYS_None + fixed body. **Fix:** `Physics = 10` +
-    `BodyInstance.SetFixed(false)`.
+22. **Symptom:** elixirs/ammo can't be grabbed. **Cause:** PHYS_None + fixed body. **Fix:** `Physics = 10`
+    (PHYS_RigidBody) + `BodyInstance.SetFixed(false)`.
 23. **Symptom:** test results made no sense. **Cause:** the human was playing at the same time.
     **Fix:** ask for hands-off windows during scripted tests.
 24. **Symptom:** effects "cast from the left hand" appear on the right, by the sword. **Cause:** UE3 is
@@ -231,8 +239,8 @@ weapon wheel. Patching the vtables of `IDirectInput8::CreateDevice` and, for `GU
     pointed right. **Fix:** add it (or use `up x view` for right).
 25. **Symptom:** the game-audio capture is pure silence. **Cause:** the game mutes when its window is not in
     the foreground, and on the Game Over screen (a guard alerted by the tests killed the player). **Fix:**
-    focus the window right before recording and keep the player safe; check a screenshot when a capture is
-    flat zero.
+    focus the window right before recording (ask the human first, and not while they're typing) and keep the
+    player safe; check a screenshot when a capture is flat zero.
 
 ## Assets
 None created. All effects and animations are the game's own, used at runtime; nothing extracted or shipped.
@@ -244,5 +252,8 @@ One long working day (about 9 hours), roughly 60 hot reloads and 8 game crashes 
 - The real cause of the ~10 m freeze of script-created ragdolls (a native system tied to living NPCs or to
   ragdolls not started by the death path?). Finding it would remove the unstick workaround.
 - A natural get-up animation instead of `TermRagdoll`.
-- A per-tick hook for physics work (traces would then work).
+- A per-tick hook for physics work (traces would then work). A lead, not tried: `GameInfo.Timer`, which the
+  Gotcha 4 probe saw firing, is a looping `SetTimer` callback (in UDK, `GameInfo.SetGameSpeed` starts it at the
+  time-dilation rate, about once a second), so it likely runs during the world tick. Swapping its `Func` would
+  be a cheap test of whether traces and `SetLocation` work from there.
 - Other NPC skeletons, rats (crowd agents), other gadgets.
