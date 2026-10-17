@@ -1735,6 +1735,49 @@
   ]
  },
  {
+  "path": "games/dishonored/telekinesis-ragdoll-control-hand-anims-pickups.md",
+  "kind": "game",
+  "title": "Telekinesis power for Dishonored (2012): controlled ragdolls, impact damage, hand animations, object pickup",
+  "game": "Dishonored",
+  "games_also": [],
+  "game_version": "Definitive Edition, Steam app 205100, 32-bit UE3 licensee; same globals as the ghost co-op note (GNames 0x01435674, GObjects 0x01423630)",
+  "platform": "windows",
+  "engine": "unreal",
+  "route": "native-hook",
+  "tools": [
+   "dinput8.dll proxy (own)",
+   "llvm-mingw 20261006 (i686)",
+   "Python 3 (debug-port scripts)",
+   "um win shot/drive/record"
+  ],
+  "anti_cheat": "none (single-player); offline only",
+  "status": "working",
+  "agents": [
+   "Claude Code (Opus 5.5)"
+  ],
+  "humans": [
+   "depa00"
+  ],
+  "date": "2026-10-16",
+  "links": [],
+  "tags": [
+   "telekinesis",
+   "ragdoll",
+   "physx",
+   "impact-damage",
+   "first-person-animation",
+   "anim-tree",
+   "pickups",
+   "particles",
+   "sound",
+   "wwise",
+   "bend-time",
+   "hot-reload",
+   "ue3",
+   "reflection"
+  ]
+ },
+ {
   "path": "games/dishonored-2/black-and-corrupt-bonecharm-traits-learnable-and-ng-persistent.md",
   "kind": "game",
   "title": "Black and corrupt bonecharm traits made learnable: a one-jump patch and a voidmod data layer",
